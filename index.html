@@ -1900,6 +1900,15 @@
           })
           .slice(0, 10);
       }
+      function homeworkRank(logs) {
+        const top = bestPerStudent((logs || []).filter((e) => e.track === "功課" && (e.done || 0) >= HW_TOTAL));
+        top.sort((a, b) => {
+          const ta = a.avgSec || 99999, tb = b.avgSec || 99999;
+          if (ta !== tb) return ta - tb;
+          return cmpStudent(a, b);
+        });
+        return top.map((e, i) => ({ entry: e, rank: i + 1 }));
+      }
       async function renderRank(force) {
         const seq = ++rankSeq;
         const box = $("rankRecords");
@@ -1910,16 +1919,11 @@
         catch (err) { fail = true; }
         if (seq !== rankSeq) return;
         if (fail) { box.innerHTML = `<div class="empty">未能連線</div>`; return; }
-        const top = bestPerStudent(logs.filter((e) => e.track === "功課"));
-        if (!top.length) { box.innerHTML = `<div class="empty">未有紀錄</div>`; return; }
-        const ranks = [];
-        top.forEach((e, i) => {
-          ranks.push(i > 0 && (e.done || 0) === (top[i - 1].done || 0) ? ranks[i - 1] : i + 1);
-        });
+        const rows = homeworkRank(logs);
+        if (!rows.length) { box.innerHTML = `<div class="empty">未有紀錄</div>`; return; }
         box.innerHTML = `<table>
           <thead><tr><th class="score-h">名次</th><th>班別學號</th><th class="score-h">用時</th></tr></thead>
-          <tbody>${top.map((e, i) => {
-            const n = ranks[i];
+          <tbody>${rows.map(({ entry: e, rank: n }) => {
             const cls = n === 1 ? "r1" : n === 2 ? "r2" : n === 3 ? "r3" : "";
             return `<tr class="${cls}"><td class="rank-cell">${n}</td><td>${escapeHtml(e.classId)} ${escapeHtml(e.studentId)}</td><td class="score-cell">${e.avgSec || 0}秒</td></tr>`;
           }).join("")}</tbody></table>`;
@@ -4288,11 +4292,17 @@
         if (state.penalty !== 0) fails.push("penalty");
         const parsedEx = parseTrack("小組｜例題\n• 圖形算式錯誤（1次）");
         if (parsedEx.qname !== "例題" || parsedEx.hints !== 1) fails.push("parse-ex");
-        const rankTop = bestPerStudent([
-          { classId: "5A", studentId: "01", done: 1, avgSec: 9, track: "個人" },
-          { classId: "5A", studentId: "02", done: 4, avgSec: 20, track: "功課" }
-        ].filter((e) => e.track === "功課"));
-        if (rankTop.length !== 1 || rankTop[0].studentId !== "02") fails.push("rank-hw");
+        const ranked = homeworkRank([
+          { classId: "5A", studentId: "01", done: 5, avgSec: 9, track: "個人" },
+          { classId: "5A", studentId: "02", done: 4, avgSec: 8, track: "功課" },
+          { classId: "5A", studentId: "03", done: 5, avgSec: 90, track: "功課" },
+          { classId: "5B", studentId: "01", done: 5, avgSec: 40, track: "功課" },
+          { classId: "5A", studentId: "04", done: 5, avgSec: 40, track: "功課" },
+          { classId: "5A", studentId: "04", done: 5, avgSec: 120, track: "功課" }
+        ]);
+        if (ranked.length !== 3 || ranked[0].rank !== 1 || ranked[0].entry.studentId !== "04") fails.push("rank-1");
+        if (ranked[1].rank !== 2 || ranked[1].entry.classId !== "5B") fails.push("rank-2");
+        if (ranked[2].rank !== 3 || ranked[2].entry.studentId !== "03" || ranked[2].entry.avgSec !== 90) fails.push("rank-3");
         const tops = topMisses([
           { body: "• 漏除以2（2次）\n• 分割後資料不足（1次）" },
           { body: "• 漏除以2（1次）\n• 未點選填補圖形（2次）" },
